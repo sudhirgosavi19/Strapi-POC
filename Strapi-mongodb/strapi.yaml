@@ -1,0 +1,62 @@
+kind: Service
+metadata:
+  name: strapi
+  labels:
+    app: strapi
+spec:
+  type: LoadBalancer
+  ports:
+    - name: strapi
+      targetPort: 443
+      protocol: TCP
+      port: 30143
+  selector:
+    app: strapi
+apiVersion: v1
+
+---
+
+kind: Deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: strapi
+    spec:
+      containers:
+        - image: YOUR_REGISTRY:5000/strapi-image:v
+          imagePullPolicy: Always
+          env:
+            - name: NAMESPACE
+              value: "ns-strapi"
+            - name: "DATABASE_CLIENT"
+              value: "mongo"
+            - name: "DATABASE_NAME"
+              value: "strapi-mongo"
+            - name: "DATABASE_PORT"
+              value: "30144"
+            - name: "DATABASE_HOST"
+              value: "mongo.ns-strapi.svc.cluster.local"
+            - name: "APP_NAME"
+              value: "strapi-app"
+          name: masterstrapi
+          ports:
+            - containerPort: 1337
+          resources:
+            requests:
+              cpu: '2'
+              memory: 4Gi
+            limits:
+              cpu: '2'
+              memory: 4Gi
+          volumeMounts:
+            - name: strapi-volume
+              mountPath: "/persistent"
+      volumes:
+        - name: strapi-volume
+          persistentVolumeClaim:
+            claimName: pvc-sc-strapi
+apiVersion: extensions/v1beta1
+metadata:
+  name: masterstrapi

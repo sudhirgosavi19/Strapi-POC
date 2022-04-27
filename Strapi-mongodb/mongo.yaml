@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: strapi-mongo
+  namespace: ns-strapi
+spec:
+  serviceName: strapi-mongo-svc
+  replicas: 3
+  selector:
+    matchLabels:
+      app: strapi-mongo
+  template:
+    metadata:
+      labels:
+        app: strapi-mongo
+        selector: strapi-mongo
+    spec:
+      affinity:
+        # Try to put each mongo pod on a different node in the K8s cluster
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - strapi-mongo
+                topologyKey: kubernetes.io/hostname
+      initContainers:
+        # Fix the permissions on the volume.
+        - name: fix-the-volume-permission
+          image: busybox
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+          command: ['sh', '-c', 'chown -R 1000:1000 /data/db']
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: mongo-volume
+              mountPath: /data/db
+      containers:
+        - name: strapi-mongo
+          image: mongo:4.0.8
+          ports:
+            - containerPort: 27017
+              name: tcp
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            limits:
+              cpu: 500m
+              memory: "1Gi"
+            requests:
+              cpu: 500m
+              memory: "1Gi"
+          volumeMounts:
+            - name: mongo-volume
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-volume
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: sc-strapi
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: strapi
+  name: mongo
+  namespace: ns-strapi
+spec:
+  type: LoadBalancer
+  ports:
+    - name: mongo
+      port: 30144
+      protocol: TCP
+      targetPort: 27017
+  selector:
+    app: strapi-mongo
